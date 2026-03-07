@@ -1,0 +1,19 @@
+[project]
+name = "a25-hashtags-for-change"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "KAYLEE LIU", email = "KAYLEELIU@UCHICAGO.EDU" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "pandas>=3.0.1",
+]
+
+[project.scripts]
+a25-hashtags-for-change = "a25_hashtags_for_change:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
