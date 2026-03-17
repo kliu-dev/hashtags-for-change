@@ -1,3 +1,6 @@
+# macOS
+.DS_Store
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -7,7 +10,7 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
 
 # Folders
 data/
