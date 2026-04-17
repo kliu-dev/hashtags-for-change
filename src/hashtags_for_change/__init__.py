@@ -1,2 +1,2 @@
 def main() -> None:
-    print("Hello from a25-hashtags-for-change!")
+    print("Hello from hashtags-for-change!")

@@ -1,135 +1,236 @@
 import pandas as pd
 import altair as alt
 
-def country_analysis(country_name, trends_files):
+
+def data_prep(filter, name, trends_files, acled):
     """
-    docstringgg
+    Extracts relevant portion of ACLED data for search term or hashtag of
+    interest. Cleans and merges the Google trends and ACLED dataset by time to
+    prepare for analysis.
+
+    Args:
+        - filter (callable): function that filters the ACLED data based on the
+            category of the subject of the analysis
+        - name (str): the name of the subject of analysis
+        - trends_files (dict): the file paths of the csv files associated with 'name',
+            in a dictionary (key = search term, value = full file path)
+        - acled (pd.DataFrame): complete acled dataset
+
+    Returns:
+        - trends_data (dict): cleaned Google trends data for each search term
+        - merged (pd.DataFrame): cleaned and combined dataset with ACLED and
+            search interest aligned by month
     """
-    print("=" * 80)
-    print(f"{country_name} analysis")
+    print("\n" + "=" * 80)
+    print(f"{name.upper()} ANALYSIS")
     print("=" * 80)
 
-    # FLILTER ACLED DATA
-    # ------------------
-    country_acled = acled[
-        (acled['COUNTRY'] == country_name) &
-        (acled['WEEK'] >= '2020-01-01')
-    ].copy()
+    filtered_acled = filter(name, acled)
 
-    country_acled['month'] = country_acled['WEEK'].dt.to_period('M').dt.to_timestamp()
-    country_monthly = country_acled.groupby('month').agg({
+    filtered_acled['WEEK'] = pd.to_datetime(filtered_acled['WEEK'])
+    filtered_acled['month'] = filtered_acled['WEEK'].dt.to_period('M').dt.to_timestamp()
+
+    country_monthly = filtered_acled.groupby('month').agg({
         'EVENTS': 'sum',
         'FATALITIES': 'sum'
     })
 
     print(f"ACLED data: {len(country_monthly)} months")
-    print(f"Date range: {country_monthly['month'].min()} to {country_monthly['month'].max()}")
+    print(f"Date range: {country_monthly.min()} to {country_monthly.max()}")
     print(f"Total events: {country_monthly['EVENTS'].sum():,}")
     print(f"Total fatalities: {country_monthly['FATALITIES'].sum():,}")
 
     # LOAD GOOGLE TRENDS FILES
     # ------------------------
     trends_data = {}
-    for name, path in trends_files.items():
+    for n, path in trends_files.items():
         try:
-            df = pd.read_csv(filepath, skiprows = 1)
+            df = pd.read_csv(path, skiprows = 1)
             df.columns = ['month', 'value']
             df['month'] = pd.to_datetime(df['month'])
             df['value'] = df['value'].replace('<1', '0.5')
             df['value'] = pd.to_numeric(df['value'], errors='coerce')
-            trends_data[name] = df
-            print(f"Loaded: {name:25s} - {len(df)} months, max={df['value'].max()}")
+            trends_data[n] = df
+            print(f"Loaded: {n:25s} - {len(df)} months, max={df['value'].max()}")
         except Exception as e:
-            print(f"    ERROR LOADING {name}: {e}")
+            print(f"    ERROR LOADING {n}: {e}")
 
     # MERGE DATASETS
     # --------------
     merged = country_monthly.copy()
-    for name, df in trends_data.items():
+    for n, df in trends_data.items():
         merged = merged.merge(
-            df.rename(columns={'value': name}),
+            df.rename(columns={'value': n}),
             on='month',
             how='left'
         )
     print(f"\nMerged dataset: {len(merged)} months with {len(trends_data)} search terms")
+    return trends_data, merged
 
 
-def corr_analysis(country_name, trends_data, merged):
+def corr_analysis(trends_data, merged):
     """
-    docstringgg
+    Conducts pearson correlation analysis between ACLED events data and Google
+    trends data. Checks correlation with events and correlation with fatalities.
+
+    Args:
+        - trends_data (dict): cleaned Google trends data for each search term
+        - merged (pd.DataFrame): cleaned and combined dataset with ACLED and
+            search interest aligned by month
+
+    Returns:
+        - corr_df (pd.DataFrame): data frame containg correlation values between
+            each search term and ACLED metric, as well as how many data points
+            were used in each calculation
     """
-    print("=" * 80)
+    print("\n" + "=" * 80)
     print("CORRELATION ANALYSIS")
     print("=" * 80)
 
-    correlations = []
-    for term in trends_data.keys():
-        if term in merged.columns:
-        valid_data = merged[['EVENTS', 'FATALITIES', term]].dropna()
-        if len(valid_data) > 10:
-            corr_events = valid_data['EVENTS'].corr(valid_data[term])
-            corr_fatalities = valid_data['FATALITIES'].corr(valid_data[term])
-            correlations.append({
-                'Search Term': term,
-                'Corr w/ Events': corr_events,
-                'Corr w/ Fatalities': corr_fatalities,
-                'Data Points': len(valid_data)
-            })
-    
-    corr_df = pd.DataFrame(correlations).sort_values('Corr w/ Events', ascending=False)
-    print("\n" + f"{country_name}".to_string(index=False))
+    try:
+        correlations = []
+        corr_df = None
+        for term in trends_data.keys():
+            if term in merged.columns:
+                valid_data = merged[['EVENTS', 'FATALITIES', term]].dropna()
+            if len(valid_data) > 10:
+                corr_events = valid_data['EVENTS'].corr(valid_data[term])
+                corr_fatalities = valid_data['FATALITIES'].corr(valid_data[term])
+                correlations.append({
+                    'Search Term': term,
+                    'Corr w/ Events': corr_events,
+                    'Corr w/ Fatalities': corr_fatalities,
+                    'Data Points': len(valid_data)
+                })
+                corr_df = pd.DataFrame(correlations).sort_values('Corr w/ Events', ascending=False)
+
+        print(corr_df.to_string(index=False))
+
+        return corr_df
+    except Exception as e:
+        print(f"Error in correlation analysis.")
+        print(e)
 
 
-def time_lag_analysis(corr_df):
+def time_lag_analysis(corr_df, merged):
     """
-    docstringgg
+    Conducts time lag analysis between ACLED events data and Google trends
+    data for most strongly correlated search terms (up to 3).
+
+    For each top correlated search term, looks at a window of -3 to +3 months
+    to determine whether search interest leads, lags, or coincides with events.
+    Identifies and interprets the lag with the greatest absolute correlation as:
+        - reactive if best_lag > 0
+        - predictive if best_lag < 0
+        - concurrent if best_lag == 0
+
+    Args:
+        - corr_df (pd.DataFrame): data frame containg correlation values between
+            each search term and ACLED metric, as well as how many data points
+            were used in each calculation
+        - merged (pd.DataFrame): cleaned and combined dataset with ACLED and
+            search interest aligned by month
+
+    Returns:
+        - top_terms: the top search terms that were used in time lag analysis
     """
-    print("=" * 80)
+    print("\n" + "=" * 80)
     print("TIME LAG ANALYSIS")
     print("=" * 80)
 
-    top_terms = corr_df.head(3)['Search Term'].tolist()
+    try:
+        top_terms = corr_df.head(3)['Search Term'].tolist()
 
-    for term in top_terms:
-        print(f"\n{term}:")
-        valid_data = merged[['EVENTS', term]].dropna()
-        best_corr = -999
-        best_lag = 0
+        for term in top_terms:
+            print(f"\n{term}:")
+            valid_data = merged[['EVENTS', term]].dropna()
+            best_corr = -999
+            best_lag = 0
 
-        for lag in range(-3, 4):
-            if lag == 0:
-                corr = valid_data['EVENTS'].corr(valid_data[term])
-            elif lag > 0:
-                if len(valid_data) > lag:
-                    corr = valid_data['EVENTS'].iloc[lag:].corr(valid_data[term].iloc[:-lag])
+            for lag in range(-3, 4):
+                if lag == 0:
+                    corr = valid_data['EVENTS'].corr(valid_data[term])
+                elif lag > 0:
+                    if len(valid_data) > lag:
+                        corr = valid_data['EVENTS'].iloc[lag:].corr(valid_data[term].iloc[:-lag])
+                    else:
+                        corr = 0
                 else:
-                    corr = 0
-            else:
-                if len(valid_data) > abs(lag):
-                    corr = valid_data['EVENTS'].iloc[:lag].corr(valid_data[term].iloc[-lag:])
-                else:
-                    corr = 0
+                    if len(valid_data) > abs(lag):
+                        corr = valid_data['EVENTS'].iloc[:lag].corr(valid_data[term].iloc[-lag:])
+                    else:
+                        corr = 0
 
-            if abs(corr) > abs(best_corr):
-                best_corr = corr
-                best_lag = lag
+                if abs(corr) > abs(best_corr):
+                    best_corr = corr
+                    best_lag = lag
 
-            direction = "searches LAG" if lag > 0 else ("searches LEAD" if lag < 0 else "CONCURRENT")
-            print(f"\tLag {lag:+2d} months ({direction:15s}): correlation = {corr:+.3f}")
+                direction = "searches LAG" if lag > 0 else ("searches LEAD" if lag < 0 else "CONCURRENT")
+                print(f"\tLag {lag:+2d} months ({direction:15s}): correlation = {corr:+.3f}")
 
-        interpretation = "REACTIVE (searches follow events)" if best_lag > 0 else \
-                        "PREDICTIVE (searches precede events)" if best_lag < 0 else \
-                        "CONCURRENT (searches match events)"
-        print(f"\n  → Best correlation at lag {best_lag:+d}: {best_corr:+.3f} ({interpretation})")
+            interpretation = "REACTIVE (searches follow events)" if best_lag > 0 else \
+                            "PREDICTIVE (searches precede events)" if best_lag < 0 else \
+                            "CONCURRENT (searches match events)"
+            print(f"\n  → Best correlation at lag {best_lag:+d}: {best_corr:+.3f} ({interpretation})")
+
+        return top_terms
+    except Exception as e:
+        print(f"Error in time lag analysis.")
+        print(e)
 
 
-def visualizations(country_name, merged, top_terms):
+def key_periods(top_terms, trends_data, merged):
     """
-    docstringgg
+    Identifies and prints key periods of high conflict activity (top 5 months
+    with highest number of ACLED events) and associated search interest.
+
+    Args:
+        - top_terms (list): top search terms from correlation analysis
+        - trends_data (dict): Dictionary of cleaned Google Trends datasets.
+        - merged (pd.DataFrame): cleaned and combined dataset with ACLED and
+            search interest aligned by month
+
+    Returns:
+        - None
     """
     print("\n" + "="*80)
+    print("KEY PERIODS")
+    print("="*80)
+
+    print("\nTop 5 Event Spikes:")
+    top_spikes = merged.nlargest(5, 'EVENTS')[['month', 'EVENTS', 'FATALITIES'] + list(trends_data.keys())]
+    for idx, row in top_spikes.iterrows():
+        print(f"\n{row['month'].strftime('%B %Y')}:")
+        print(f"  ACLED Events: {row['EVENTS']:,}")
+        print(f"  ACLED Fatalities: {row['FATALITIES']:,}")
+        print(f"  Search Interest:")
+        for term in trends_data.keys():
+            if pd.notna(row[term]):
+                print(f"    - {term:25s}: {row[term]:.0f}/100")
+
+
+def visualizations(name, top_terms, merged):
+    """
+    Uses Altair to create interactive visualizations comparing ACLED event data
+    with Google trends over time. Creates a combined multi-series charts
+    comparing all metrics and individual comparison charts for each top search
+    term.
+
+    Args:
+        - name (str): the name of the subject of analysis
+        - trends_data (dict): cleaned Google trends data for each search term
+        - merged (pd.DataFrame): cleaned and combined dataset with ACLED and
+            search interest aligned by month
+
+    Returns:
+        - None
+    """
+    print("\n" + "=" * 80)
     print("CREATING VISUALIZATIONS")
     print("="*80)
+
+    if top_terms is None:
+        return None
 
     # Normalize data
     merged_normalized = merged.copy()
@@ -183,23 +284,16 @@ def visualizations(country_name, merged, top_terms):
         width=1400,
         height=450,
         title={
-            'text': '{country_name}: ACLED Events vs Google Search Interest (2020-2025)',
+            'text': f'{name.title()}: ACLED Events vs Google Search Interest (2020-2025)',
             'fontSize': 18,
             'subtitleFontSize': 13
         }
     ).interactive()
 
-    chart.save(f"{country_name}_acled_vs_trends.html")
-    print(f"✓ Saved: {country_name}_acled_vs_trends.html")
-
-    # Display
-    show(chart)
+    chart.save(f"{name.replace(' ', '_')}_acled_vs_trends.html")
+    print(f"✓ Saved: {name.replace(' ', '_')}_acled_vs_trends.html")
 
 
-def comparison_charts(top_terms):
-    """
-    docstringgg
-    """
     for term in top_terms:
         term_data = merged[['month', 'EVENTS', 'FATALITIES', term]].dropna().copy()
 
@@ -231,11 +325,11 @@ def comparison_charts(top_terms):
         ).properties(
             width=1200,
             height=400,
-            title=f'{country_name}: ACLED Events vs "{term}" Search Interest'
+            title=f'{name.title()}: ACLED Events vs "{term}" Search Interest'
         ).interactive()
-    
-        filename = f"{country_name}_{term.lower().replace(' ', '_')}_comparison.html"
+
+        filename = f"{name.replace(' ', '_')}_{term.lower().replace(' ', '_')}_comparison.html"
         term_chart.save(filename)
         print(f"✓ Saved: {filename}")
 
-    print(f"\n{country_name} analysis complete!")
+    print(f"\n{name.title()} analysis complete!")

@@ -4,9 +4,19 @@ PATH_HEADER = 'data/google_trends_raw/'
 
 def create_paths_dict():
     """
-    docstring
-    """
+    Create dctionaries with search term as key and file path as corresponding
+    value. This function uses the constant PATH_HEADER, which may change
+    depending on local file structure.
 
+    Args:
+        - None
+
+    Returns:
+        - tier1_paths (dict): full paths for all tier 1 terms
+        - tier2_paths (dict): full paths for all tier 2 terms
+        - tier3_paths (dict): nested dictionary, by country, region, and theme.
+            contains full paths for all tier3 terms
+    """
     # TIER 1 FILE NAMES
     ukraine_trends = {
         'Ukraine conflict': 'google_trends_Ukraine_conflict.csv',
@@ -251,8 +261,7 @@ def create_paths_dict():
         '#FreedomConvoy2022': 'google_trends_FreedomConvoy2022.csv'
     }
 
-
-    # CONGREGATE!!!
+    # CONGREGATE
     tier1_paths = {
         'ukraine': ukraine_trends,
         'india': india_trends,
@@ -270,7 +279,7 @@ def create_paths_dict():
         'iraq': iraq_trends,
         'france': france_trends,
         'russia': russia_trends,
-        'korea': korea_trends,
+        'south korea': korea_trends,
         'turkey': turkey_trends,
         'colombia': colombia_trends,
         'lebanon': lebanon_trends,
@@ -326,7 +335,13 @@ def create_paths_dict():
 
 def validate_paths(my_dict):
     """
-    check if the paths work yuh
+    Checks if able to successfully all the paths in a given dictionary.
+
+    Args:
+        - my_dict (dict): dictionary with a list of full file paths
+    
+    Returns:
+        - sum (int): total number of files in dictionary
     """
     sum = 0
     for key, cat in my_dict.items():
@@ -343,9 +358,16 @@ def validate_paths(my_dict):
     return sum
 
 
-def validate_tier3(my_dict):
+def validate_paths_tier3(my_dict):
     """
-    check if the paths work specifically for tier 3 yuh
+    Validates file paths for specifically tier 3 due to slightly different
+    dictionary structure.
+
+    Args:
+        - my_dict (dict): dictionary with a list of full file paths
+    
+    Returns:
+        - sum (int): total number of files in dictionary
     """
     sum = 0
     for theme, group in my_dict.items():
