@@ -17,7 +17,7 @@ the same code can be applied to any Google trends search term.
 
 ## Project Structure
 ```
-src /<br>
+src /
     hashtags_for_change /
         __init__.py
         csv_integration.py
