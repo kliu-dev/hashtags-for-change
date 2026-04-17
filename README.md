@@ -107,7 +107,7 @@ The files have the following structure:
 
 
 ## Environment Setup
-This project uses Python 3.x and manages dependencies with **uv**.
+This project uses Python 3.13 and manages dependencies with **uv**.
 
 Install dependencies:
 ```
