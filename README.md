@@ -1,7 +1,7 @@
 # Hashtags for Change
 
 *This project was managed under the University of Chicago's Data Science Society
-in Winter Quarter, 2026. This repository contains a polished, easily
+in Autumn Quarter, 2025. This repository contains a polished, easily
 reproducible version of my responsibilities as a member of the project team.
 The full project repository can be found [here](https://github.com/Tahvia127/Hashtags-For-Change).*
 
